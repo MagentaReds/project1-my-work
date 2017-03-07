@@ -1,0 +1,13 @@
+#chat-history {
+  overflow: auto;
+  height: 200px;
+  background-color: white;
+}
+
+.clearfix {
+  clear: both;
+}
+
+.float-left {
+  float: left;
+}
