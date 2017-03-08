@@ -1,136 +1,256 @@
-const gameStates = {
-  waitingForPlayers: "Waiting for all players",
-  readyToStart: "Everyone has joined that is going to, ready to start round",
-  waitingForQuestion: "Waiting for Questioneer to enter a question",
-  waitingForAnswers: "Waiting for correct answer",
-  questionAnswered: "Question has been correctly answered"
-};
-
-const playerStates = {
-  waitingForPlayer: "No one has claimed this seat",
-  questioner: "You are the questioner",
-  emptySlot: "Empty slot during the game",
-  answerer: "You are trying to answer the question"
-};
-
-  // Initialize Firebase
-var config = {
-  apiKey: "AIzaSyBRyByGGGi7bmIeFskezDVuuRWPfw0jpkQ",
-  authDomain: "ut-bootcamp-project1.firebaseapp.com",
-  databaseURL: "https://ut-bootcamp-project1.firebaseio.com",
-  storageBucket: "ut-bootcamp-project1.appspot.com",
-  messagingSenderId: "1065980904141"
-};
-firebase.initializeApp(config);
-var database=firebase.database();
-
-function Player(num){
-  this.name="";
-  this.joined=false;
-  this.number=num;
-  this.points=0;
-  this.ref=database.ref("player/"+num);
-
-  this.updateValues = function(snapshot){
-    var val=snapshot.val();
-    this.name=val.name;
-    this.points=val.points;
-    this.joined=val.joined;
-  };
-  this.sendAnswer = function(message){
-    //main_game.checkAnswer(message, this.number);
-  };
-  this.refSetValues = function(){
-    this.ref.set({name: this.name, joined: this.joined, points: this.points});
-  };
-  this.refDisconnectAttach = function(){
-    this.ref.onDisconnect().remove();
-  };
-}
-
-var player1= new Player(1);
-var player2= new Player(2);
-var player3= new Player(3);
-var player4= new Player(4);
-var player5= new Player(5);
-
 var main_game = {
-  players: [null,player1,player2,player3,player4,player5],
+  seats: [new Seat(0),new Seat(1),new Seat(2),new Seat(3),new Seat(4),new Seat(5)],
   gameState: gameStates.waitingForPlayers,
+  lastGameState: null,
   round:0,
-  windowPlayer: null,
-  currentPlayer: null,
-  questioner: null,
+  windowSeat: null,
+  currentSeat: null,
+  questioner: 0,
   question: "",
   answer: "",
+  answerer: 0,
+  chatRef: database.ref("chat"),
+  gameRef: database.ref("game"),
+
+  fbPlayerInit: function() {
+    for(var i=1; i<this.seats.length; ++i)
+      this.seats[i].refSetValues();
+
+    this.gameRef.set({gameState: gameStates.waitingForPlayers, questioner: 0, question: "", answerer: 0, answer: ""});
+
+  },
+
+  refSetValues: function() {
+    this.refSetValuesHelper(this.gameState, this.question, this.questioner, this.answer, this.answerer);
+  },
+
+  refSetValuesHelper: function (g, q, q1, a, a1) {
+    this.gameRef.set({gameState: g, question: q, questioner: q1, answer: a, answerer: a1});
+  },
 
   reset: function() {
-
+    this.windowSeat=this.seats[0];
   },
   
-  joinGame: function(name, num){
-    this.windowPlayer=this.players[num];
-    this.windowPlayer.name=name;
-    this.windowPlayer.joined=true;
-    this.windowPlayer.points=0;
-    this.windowPlayer.refSetValues();
-    this.windowPlayer.refDisconnectAttach();
+  joinGame: function(num, name){
+    if(this.seats[num].joined) {
+      alert("This seat is taken");
+    }
+    else {
+      this.seats[num]= new Seat(num, name, true);
+      this.windowSeat=this.seats[num];
+      this.windowSeat.state=seatStates.waitingForGameToStart;
+      this.windowSeat.refSetValues();
+      this.windowSeat.refDisconnectAttach();
+
+      var tempMsg = name+" has taken seat "+num
+      this.chatRef.push({msg: tempMsg});
+    }
   },
 
+  updateGameValues: function(val) {
+    this.gameState=val.gameState;
+    this.questioner=val.questioner;
+    this.question=val.question;
+    this.answer=val.answer;
+    this.answerer=val.answerer;
+    main_game.checkGameState();
+  },
+
+  updateSeatValues: function(num, val) {
+    var tempSeat=this.seats[num];
+    tempSeat.name=val.name;
+    tempSeat.joined=val.joined;
+    tempSeat.points=val.points;
+    tempSeat.ready=val.ready;
+
+    main_game.checkSeatState(num);
+    main_game.checkGameState();
+  },
+
+  checkSeatState: function(num) {
+    var tempSeat=this.seats[num];
+    if(!tempSeat.joined)
+      tempSeat.state=seatStates.waitingForPlayer;
+    else if(this.gameState===gameStates.waitingForPlayers || this.gameState===gameStates.readyToStart)
+      tempSeat.state=seatStates.waitingForGameToStart;
+    else if(this.gameState===gameStates.waitingForQuestion || this.gameState===gameStates.waitingForAnswers)
+      if(this.questioner!=null && this.questioner.number===tempSeat.number)
+        tempSeat.state=seatStates.questioner;
+      else
+        tempSeat.state=seatStates.answerer;
+
+  },
+
+  // checkGameState: function() {
+  //   var tempState=null;
+  //   if(!this.allSeatsJoinedReady())
+  //     tempState=gameStates.waitingForPlayers;  
+  //   else if(this.gameState===gameStates.waitingForPlayers)
+  //     tempState=gameStates.readyToStart;
+  //   else if(this.questionSet() && this.gameState===gameStates.waitingForQuestion)
+  //     tempState=gameStates.waitingForAnswer;
+  //   else if(this.questionAnswered() && this.gameState===gameStates.waitingForAnswer)
+  //     tempState=gameStates.questionAnswered;
+
+  //   this.changeGameState(tempState);
+  // },
+
+  checkGameState: function() {
+    if(this.lastGameState!==this.gameState) {
+      this.lastGameState=this.gameState;
+
+      switch(this.gameState) {
+        case gameStates.waitingForPlayers:
+          this.jqGameText1("Waiting for players");
+          break;
+        case gameStates.readyToStart:
+          this.startRound();
+          break;
+        case gameStates.waitingForQuestion:
+          this.displayGetQuestion();
+          break;
+        case gameStates.waitingForAnswer:
+          this.displayQuestion();
+          break;
+        case gameStates.questionAnswered:
+          this.displayResults();
+          this.calculatePoints();
+          //this.startRound();
+          break;
+      }
+    }
+  },
+
+  startRound: function() {
+    this.questioner++;
+    while(!this.seats[this.questioner].joined && this.questioner<this.seats.length)
+      this.questioner++;
+    if(this.questioner!==this.seats.length)
+      if(this.windowSeat.number === this.questioner){
+        this.windowSeat.getAnswer();
+      }
+  },
+
+  displayGetQuestion: function() {
+    this.jqGameText1("The Questioner is "+this.seats[this.questioner].name);
+    if(this.questioner===this.windowSeat.number) {
+      this.jqGameText2("Please enter in a question in the chat box");
+    }
+    else {
+      this.jqGameText2("Waiting on Questiner to enter in a question");
+    }
+  },
+
+  displayQuestion: function() {
+    this.jqGameText1("The Question is: "+this.question);
+     if(this.questioner===this.windowSeat.number) {
+      this.jqGameText2("You may offer hints if you want");
+    }
+    else {
+      this.jqGameText2("The chat box is also used as your submit answer box");
+    }
+  },
+
+  displayResults: function() {
+    this.jqGameText1(this.seats[this.answerer].name+" has answered the question!");
+    this.jqGameText2("The answer was: "+this.answer);
+  },
+
+  calculatePoints: function() {
+    if(this.answerer!==0) {
+      if(this.windowSeat.number===this.questioner && ){
+        this.windowSeat.points+=1;
+        this.windowSeat.refSetValues();
+      }
+      else if(this.windowSeat.number===this.answerer) {
+        this.windowSeat.points+=3;
+        this.windowSeat.refSetValues();
+      }
+    }
+
+  },
+
+  allSeatsJoinedReady: function() {
+    var numReady=0;
+    var allReady=true;
+    for(var i=1; i<this.seats.length; ++i)
+      if(this.seats[i].joined)
+        if(this.seats[i].ready)
+          ++numReady
+        else
+          allReady=false;
+    return allReady && (numReady>1);
+  },
+
+  sendChatMessage: function(message) {
+    if(this.windowSeat!==null) {
+      if(this.gameState===gameStates.waitingForQuestion && this.windowSeat.number===this.questioner)
+        this.setQuestion(message);
+      else if(this.gameState===gameStates.waitingForAnswer && this.windowSeat.number!==this.questioner)
+        this.checkAnswer(message);
+
+      var tempMsg = this.windowSeat.name+": "+message;
+      this.chatRef.push({msg: tempMsg});
+    }
+
+  },
+
+  jqDisplayChatMessage: function(message) {
+    var p = $("<p>");
+    p.text(message);
+
+    var chatBox=$("#chat-history");
+    chatBox.append(p);
+    chatBox.scrollTop(chatBox[0].scrollHeight);
+  },
+
+  windowReady: function() {
+    if(this.gameState===gameStates.waitingForPlayers) {
+      if(this.windowSeat!==null){
+        if(this.windowSeat.ready){
+          this.windowSeat.ready=false;
+          this.windowSeat.refSetValues();
+          this.jqGameText2("You are not ready.");
+        } else {
+          this.windowSeat.ready=true;
+          this.windowSeat.refSetValues();
+          this.jqGameText2("You are Ready!");
+          //the Last person to be able to be ready clicks ready
+          if(this.allSeatsJoinedReady()) {
+            this.gameState=gameStates.readyToStart;
+            this.refSetValues();
+          }
+        }
+      }
+    }
+  },
+
+  setAnswer: function(str) {
+    this.answer=str;
+    this.gameState=gameStates.waitingForQuestion;
+    this.refSetValues();
+  },
+
+  setQuestion: function(str) {
+    this.question=str;
+    this.gameState=gameStates.waitingForAnswer;
+    this.refSetValues();
+  },
+
+  checkAnswer: function(str) {
+    if(str===this.answer){
+      this.answerer=this.windowSeat.number;
+      this.gameState=gameStates.questionAnswered;
+      this.refSetValues();
+    }
+  },
+
+  jqGameText1: function(str){
+    $("#game-text-1").text(str);
+  },
+  jqGameText2: function(str){
+    $("#game-text-2").text(str);
+  },
 };
 
-$(document).ready(function(){
-
-  $("#player1-name-submit").on("click", function(event){
-    event.preventDefualt();
-    main_game.joinGame($("player1-name-input").val().trim(),1);
-  });
-  $("#player2-name-submit").on("click", function(event){
-    event.preventDefualt();
-    main_game.joinGame($("player2-name-input").val().trim(),2);
-  });
-  $("#player3-name-submit").on("click", function(event){
-    event.preventDefualt();
-    main_game.joinGame($("player3-name-input").val().trim(),3);
-  });
-  $("#player4-name-submit").on("click", function(event){
-    event.preventDefualt();
-    main_game.joinGame($("player4-name-input").val().trim(),4);
-  });
-  $("#player5-name-submit").on("click", function(event){
-    event.preventDefualt();
-    main_game.joinGame($("player5-name-input").val().trim(),5);
-  });
-
-
-  database.ref("player/1").on("value", function(snapshot){
-      if(snapshot.exists())
-        player1.updateValues(snapshot);
-    }, function(errorObject){
-      console.log("Errors handled: " + errObject.code);
-  });
-  database.ref("player/2").on("value", function(snapshot){
-      if(snapshot.exists())
-        player2.updateValues(snapshot);
-    }, function(errorObject){
-      console.log("Errors handled: " + errObject.code);
-  });
-  database.ref("player/3").on("value", function(snapshot){
-      if(snapshot.exists())
-        player3.updateValues(snapshot);
-    }, function(errorObject){
-      console.log("Errors handled: " + errObject.code);
-  });
-  database.ref("player/4").on("value", function(snapshot){
-      if(snapshot.exists())
-        player4.updateValues(snapshot);
-    }, function(errorObject){
-      console.log("Errors handled: " + errObject.code);
-  });
-  database.ref("player/5").on("value", function(snapshot){
-      if(snapshot.exists())
-        player5.updateValues(snapshot);
-    }, function(errorObject){
-      console.log("Errors handled: " + errObject.code);
-  });
-});

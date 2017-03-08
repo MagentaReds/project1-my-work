@@ -7,6 +7,11 @@
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
   <link rel="stylesheet" type="text/css" href="./assets/css/style.css">
 
+
+   <script
+    src="https://code.jquery.com/jquery-3.1.1.min.js"
+    integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
+    crossorigin="anonymous"></script>
   <script src="https://www.gstatic.com/firebasejs/3.7.0/firebase.js"></script>
 </head>
 <body>
@@ -18,10 +23,6 @@
       <input id="player1-name-input" type="text">
       <button id="player1-name-submit">Send</button>
     </form>
-    <form id="player1-guess-form">
-      <input id="player1-guess-input" type="text">
-      <button id="player1-guess-submit">Send</button>
-    </form>
   </div>
 
   <div id="player2" class="float-left">
@@ -30,10 +31,6 @@
     <form id="player2-name-form">
       <input id="player2-name-input" type="text">
       <button id="player2-name-submit">Send</button>
-    </form>
-    <form id="player2-guess-form">
-      <input id="player2-guess-input" type="text">
-      <button id="player2-guess-submit">Send</button>
     </form>
   </div>
 
@@ -44,10 +41,6 @@
       <input id="player3-name-input" type="text">
       <button id="player3-name-submit">Send</button>
     </form>
-    <form id="player3-guess-form">
-      <input id="player3-guess-input" type="text">
-      <button id="player3-guess-submit">Send</button>
-    </form>
   </div>
 
   <div id="player4" class="float-left">
@@ -56,10 +49,6 @@
     <form id="player4-name-form">
       <input id="player4-name-input" type="text">
       <button id="player4-name-submit">Send</button>
-    </form>
-    <form id="player4-guess-form">
-      <input id="player4-guess-input" type="text">
-      <button id="player4-guess-submit">Send</button>
     </form>
   </div>
 
@@ -70,14 +59,18 @@
       <input id="player5-name-input" type="text">
       <button id="player5-name-submit">Send</button>
     </form>
-    <form id="player5-guess-form">
-      <input id="player5-guess-input" type="text">
-      <button id="player5-guess-submit">Send</button>
-    </form>
   </div>
 
   <br><br>
 
+  <div id="game-text" class="clearfix">
+    <h3>Game Text</h3>
+    <button id="player-ready">Ready?</button>
+    <h3 id="game-text-1">None</h3>
+    <h3 id="game-text-2">None</h3>
+  </div>
+
+  <br><br>
   <div id="chat" class="clearfix">
     <label for="chat-history">Chat History</label>
     <div id="chat-history"></div>
@@ -88,11 +81,10 @@
   </div>
   
 </body>
-  <script
-  src="https://code.jquery.com/jquery-3.1.1.min.js"
-  integrity="sha256-hVVnYaiADRTO2PzUGmuLJr8BLUSjGIZsDYGmIJLv2b8="
-  crossorigin="anonymous"></script>
 
-  <script type="text/javascript" src="./assets/javascript/game.js"></script>
+  <script src="./assets/javascript/globalvars.js"></script>  
+  <script src="./assets/javascript/seat.js"></script>
+  <script src="./assets/javascript/game.js"></script>
+  <script src="./assets/javascript/main.js"></script>
 
 </html>
