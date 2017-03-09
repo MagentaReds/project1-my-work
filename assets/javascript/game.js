@@ -161,7 +161,7 @@ var main_game = {
       this.fbTempHostSetGame();
       return;
     }
-    if(this.windowSeat.number === this.questioner)
+    else if(this.windowSeat.number === this.questioner)
         this.windowSeat.getAnswer();
   },
 
