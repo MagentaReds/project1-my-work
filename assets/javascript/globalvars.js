@@ -3,7 +3,9 @@ const gameStates = {
   readyToStart: "Everyone has joined that is going to, ready to start round",
   waitingForQuestion: "Waiting for Questioneer to enter a question",
   waitingForAnswer: "Waiting for correct answer",
-  questionAnswered: "Question has been correctly answered"
+  questionAnswered: "Question has been correctly answered",
+  roundOver: "All players have been the quesitoner",
+  gameOver: "All Rounds complete"
 };
 
 const seatStates = {

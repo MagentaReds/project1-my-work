@@ -82,20 +82,6 @@ var main_game = {
 
   },
 
-  // checkGameState: function() {
-  //   var tempState=null;
-  //   if(!this.allSeatsJoinedReady())
-  //     tempState=gameStates.waitingForPlayers;  
-  //   else if(this.gameState===gameStates.waitingForPlayers)
-  //     tempState=gameStates.readyToStart;
-  //   else if(this.questionSet() && this.gameState===gameStates.waitingForQuestion)
-  //     tempState=gameStates.waitingForAnswer;
-  //   else if(this.questionAnswered() && this.gameState===gameStates.waitingForAnswer)
-  //     tempState=gameStates.questionAnswered;
-
-  //   this.changeGameState(tempState);
-  // },
-
   checkGameState: function() {
     if(this.lastGameState!==this.gameState) {
       this.lastGameState=this.gameState;
@@ -106,6 +92,7 @@ var main_game = {
           break;
         case gameStates.readyToStart:
           this.startRound();
+          this.setAllSeatsUnReady();
           break;
         case gameStates.waitingForQuestion:
           this.displayGetQuestion();
@@ -116,20 +103,36 @@ var main_game = {
         case gameStates.questionAnswered:
           this.displayResults();
           this.calculatePoints();
-          //this.startRound();
+          this.startRound();
+          break;
+        case gameStates.roundOver:
+          this.displayGameOver();
           break;
       }
     }
   },
 
   startRound: function() {
-    this.questioner++;
-    while(!this.seats[this.questioner].joined && this.questioner<this.seats.length)
-      this.questioner++;
-    if(this.questioner!==this.seats.length)
-      if(this.windowSeat.number === this.questioner){
+    this.questioner=this.getQuestioner();
+    if(this.questioner===-1){
+      this.questioner=0;
+      this.gameState=gameStates.roundOver;
+      this.checkGameState();
+      return;
+    }
+    if(this.windowSeat.number === this.questioner)
         this.windowSeat.getAnswer();
-      }
+  },
+
+  getQuestioner: function() {
+    var temp=this.questioner;
+    ++temp;
+    while(temp<this.seats.length && !this.seats[temp].joined)
+      ++temp;
+    if(temp<this.seats.length)
+      return temp;
+    else
+      return -1;
   },
 
   displayGetQuestion: function() {
@@ -159,7 +162,7 @@ var main_game = {
 
   calculatePoints: function() {
     if(this.answerer!==0) {
-      if(this.windowSeat.number===this.questioner && ){
+      if(this.windowSeat.number===this.questioner){
         this.windowSeat.points+=1;
         this.windowSeat.refSetValues();
       }
@@ -171,20 +174,30 @@ var main_game = {
 
   },
 
+  setAllSeatsUnReady: function() {
+    for(var i=1; i<this.seats.length; ++i){
+      this.seats[i].ready=false;
+    }
+  },
+
+  setAllSeatsPoints: function() {
+
+  },
+
   allSeatsJoinedReady: function() {
     var numReady=0;
     var allReady=true;
     for(var i=1; i<this.seats.length; ++i)
       if(this.seats[i].joined)
         if(this.seats[i].ready)
-          ++numReady
+          ++numReady;
         else
           allReady=false;
     return allReady && (numReady>1);
   },
 
   sendChatMessage: function(message) {
-    if(this.windowSeat!==null) {
+    if(this.windowSeat.number!==0) {
       if(this.gameState===gameStates.waitingForQuestion && this.windowSeat.number===this.questioner)
         this.setQuestion(message);
       else if(this.gameState===gameStates.waitingForAnswer && this.windowSeat.number!==this.questioner)
@@ -224,6 +237,18 @@ var main_game = {
         }
       }
     }
+  },
+
+  displayGameOver: function() {
+    var win=this.getWinner();
+    this.jqGameText1(win+" is the Winner!");
+    this.jqGameText2("Waiting for all people to be ready to start again");
+    this.gameState=gameStates.waitingForPlayers;
+    this.checkGameState();
+  },
+
+  getWinner: function() {
+    return this.seats[1].name;
   },
 
   setAnswer: function(str) {
