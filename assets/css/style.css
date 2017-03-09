@@ -1,8 +1,13 @@
-#chat-history {
+body {
+  background-color: pink;
+}
+
+#chat-history, #chat-history-questioner {
   overflow: auto;
   height: 200px;
   background-color: white;
 }
+
 
 .clearfix {
   clear: both;

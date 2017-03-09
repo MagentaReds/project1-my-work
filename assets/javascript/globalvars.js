@@ -1,6 +1,7 @@
 const gameStates = {
   waitingForPlayers: "Waiting for all players",
-  readyToStart: "Everyone has joined that is going to, ready to start round",
+  readyToStartGame: "Everyone has joined that is going to, ready to start game",
+  readyToStartRound: "Ready to start next round",
   waitingForQuestion: "Waiting for Questioneer to enter a question",
   waitingForAnswer: "Waiting for correct answer",
   questionAnswered: "Question has been correctly answered",
@@ -13,6 +14,12 @@ const seatStates = {
   questioner: "You are the questioner",
   emptySlot: "No one has claimed this seat",
   answerer: "You are trying to answer the question"
+};
+
+const windowStates = {
+  spectator: "This window is spectating",
+  player: "This window a regular player",
+  host: "This window is acting as the host"
 };
 
   // Initialize Firebase
