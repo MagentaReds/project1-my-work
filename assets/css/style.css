@@ -2,7 +2,7 @@ body {
   background-color: pink;
 }
 
-#chat-history, #chat-history-questioner {
+#chat-history, #chat-history-hinter {
   overflow: auto;
   height: 200px;
   background-color: white;

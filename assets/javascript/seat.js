@@ -24,7 +24,8 @@ function Seat(num=0, name="Empty", joined=false, points=0, ready=false){
   };
   //this method will call the ajax to get the random movie, and some logic if they want to skip the movie.
   this.getAnswer = function() {
-    main_game.setAnswer("The Princess Bride");
+    //main_game.setAnswer("The Princess Bride");
+    main_game.setAnswer(prompt("What is the Answer?"));
   };
   this.jqDisplayName = function() {
     $("#player"+num+"-name").text(this.name);

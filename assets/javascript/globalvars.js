@@ -1,6 +1,6 @@
 const gameStates = {
   waitingForPlayers: "Waiting for all players",
-  readyToStartGame: "Everyone has joined that is going to, ready to start game",
+  readyToStartGame: "Everyone is ready, ready to start game",
   readyToStartRound: "Ready to start next round",
   waitingForGetAnswer: "Waiting on setting the answer by the hinter",
   waitingForHint: "Waiting for hinter to enter a hint",
