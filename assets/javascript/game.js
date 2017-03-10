@@ -6,14 +6,15 @@ var main_game = {
   windowSeat: null,
   windowState: windowStates.spectator,
   hostSeat: 0,
-  questioner: 0,
-  question: "",
+  hinter: 0,
+  hint: "",
   answer: "",
   answerer: 0,
-  timerId: null,
+  intervalId: null,
+  timeoutId: null,
   timeLeft: 30,
   chatRef: database.ref("chat"),
-  qChatRef: database.ref("q-chat"),
+  hChatRef: database.ref("q-chat"),
   gameRef: database.ref("game"),
 
   reset: function() {
@@ -24,34 +25,18 @@ var main_game = {
     for(var i=1; i<this.seats.length; ++i)
       this.seats[i].fbSetSeat();
 
-    this.gameRef.set({gameState: gameStates.waitingForPlayers, questioner: 0, question: "", answerer: 0, answer: ""});
+    this.gameRef.set({gameState: gameStates.waitingForPlayers, hinter: 0, hint: "", answerer: 0, answer: ""});
 
   },
 
   fbSetGame: function () {
-    this.gameRef.set({gameState: this.gameState, question: this.question, questioner: this.questioner, answer: this.answer, answerer: this.answerer});
-  },
-
-  joinGame: function(num, name){
-    if(this.seats[num].joined) {
-      alert("This seat is taken");
-    }
-    else {
-      this.seats[num]= new Seat(num, name, true);
-      this.windowSeat=this.seats[num];
-      this.windowSeat.fbSetSeat();
-      this.windowSeat.fbDisconnectAttach();
-      this.windowState=windowStates.player;
-
-      var tempMsg = name+" has taken seat "+num
-      this.chatRef.push({msg: tempMsg});
-    }
+    this.gameRef.set({gameState: this.gameState, hint: this.hint, hinter: this.hinter, answer: this.answer, answerer: this.answerer});
   },
 
   fbUpdateGame: function(val) {
     this.gameState=val.gameState;
-    this.questioner=val.questioner;
-    this.question=val.question;
+    this.hinter=val.hinter;
+    this.hint=val.hint;
     this.answer=val.answer;
     this.answerer=val.answerer;
     this.checkGameState();
@@ -77,24 +62,60 @@ var main_game = {
     var tempSeat=this.getTempHost();
     if(tempSeat.number===this.windowSeat.number)
         this.fbSetGame();
+  },
 
+  fbSetState: function(num, state) {
+    console.log("fb Set State "+num+" "+state);
+    var tempSeat=null;
+    if(num===0)
+      tempSeat=this.getTempHost();
+    else
+      tempSeat=this.seats[num];
+
+    if(this.windowSeat.number===tempSeat.number) {
+      console.log("This Window is changing state to: "+state);
+      this.gameRef.set({gameState: state, hint: this.hint, hinter: this.hinter, answer: this.answer, answerer: this.answerer});
+    }
+  },
+
+  joinGame: function(num, name){
+    if(this.seats[num].joined) {
+      alert("This seat is taken");
+    }
+    else if(this.windowSeat.number!==0)
+      alert("You already are in a seat!");
+    else {
+      this.seats[num]= new Seat(num, name, true);
+      this.windowSeat=this.seats[num];
+      this.windowSeat.fbSetSeat();
+      this.windowSeat.fbDisconnectAttach();
+      this.windowState=windowStates.player;
+
+      var tempMsg = name+" has taken seat "+num
+      this.chatRef.push({msg: tempMsg});
+    }
   },
 
   windowReady: function() {
-    if(this.gameState===gameStates.waitingForPlayers) {
-      if(this.windowState!==windowStates.spectator) {
+    if(this.windowState!==windowStates.spectator) {
+      if(this.gameState===gameStates.waitingForPlayers || this.gameState===gameStates.readyToStartGame) {
         if(this.windowSeat.ready){
           this.windowSeat.ready=false;
           this.windowSeat.fbSetSeat();
           this.jqGameText2("You are not ready.");
+
+          //you set unready when timer is going, need to stop it if the timer 
+          //This will happen for the first person to click unready after all players have cliked ready.
+          if(this.gameState===gameStates.readyToStartGame){
+            this.fbSetState(this.windowSeat.number, gameStates.waitingForPlayers);
+          }
         } else {
           this.windowSeat.ready=true;
           this.windowSeat.fbSetSeat();
           this.jqGameText2("You are Ready!");
           //the Last person to be able to be ready clicks ready
           if(this.allSeatsJoinedReady()) {
-            this.gameState=gameStates.readyToStartGame;
-            this.fbSetGame();
+            this.fbSetState(this.windowSeat.number,gameStates.readyToStartGame);
           }
         }
       }
@@ -119,26 +140,41 @@ var main_game = {
 
       switch(this.gameState) {
         case gameStates.waitingForPlayers:
+          this.gameStopTimers();
           this.jqGameText1("Waiting for players"); //Wiatin for more than 2 players to sit and hit ready.
           break;
         case gameStates.readyToStartGame:
-          this.startGame(); //Interval to start Game
+          this.startGame(3); //Interval to start Game and timeout
           break;
         case gameStates.readyToStartRound:
+          this.gameStopTimers();  
           this.startRound();  //Includes startRound
           this.setAllSeatsUnReady();
           break;
-        case gameStates.waitingForQuestion:
-          this.displayGetQuestion();
+        case gameStates.waitingForGetAnswer:
+          this.getHintAnswer();
+          break;
+        case gameStates.waitingForHint:
+          this.displayGetHint();
           break;
         case gameStates.waitingForAnswer:
-          this.displayQuestion();
+          this.displayHint();
+          this.startAnswerTimers(30);
           break;
-        case gameStates.questionAnswered:
-          this.clearQChat();
+        case gameStates.hintAnswered:
+          this.gameStopTimers();
+          this.clearHChat();
           this.displayResults();
           this.calculatePoints();
-          this.startRound();
+          this.nextRoundTimers(3);
+          //this.startRound();// after an interval
+          break;
+        case gameStates.hintUnanswered:
+          this.gameStopTimers();
+          this.clearHChat();
+          this.displayNotAnswered();
+          this.nextRoundTimers(3);
+          //this.startRound();
           break;
         case gameStates.roundOver:
           this.displayGameOver();
@@ -147,26 +183,42 @@ var main_game = {
     }
   },
 
-  startGame: function() {
+  gameStopTimers: function() {
+    if(this.intervalId!==null){
+      clearInterval(this.intervalId);
+      this.intervalId=null;
+    }
+    if(this.timeoutId!==null) {
+      clearTimeout(this.timeoutId);
+      this.timeoutId=null;
+    }
+  },
+
+  startGame: function(time) {
     this.round=0;
-    this.gameState=gameStates.readyToStartRound;
-    this.fbTempHostSetGame();
+    this.timeLeft=time;
+    this.displayTimerCount();
+    this.jqGameText1("Countdown to game start has begun!");
+    this.intervalId=setInterval(function(){
+        main_game.displayTimerCount();
+      }, 1000);
+    this.timeoutId=setTimeout(function(){
+        main_game.fbSetState(0,gameStates.readyToStartRound);
+      }, time*1000);
   },
 
   startRound: function() {
-    this.questioner=this.getQuestioner();
-    if(this.questioner===-1){
-      this.questioner=0;
-      this.gameState=gameStates.roundOver;
-      this.fbTempHostSetGame();
-      return;
+    this.hinter=this.getHinter();
+    if(this.hinter===-1){
+      this.hinter=0;
+      this.fbSetState(0,gameStates.roundOver);
     }
-    else if(this.windowSeat.number === this.questioner)
-        this.windowSeat.getAnswer();
+    else 
+      this.fbSetState(this.hinter, gameStates.waitingForGetAnswer);
   },
 
-  getQuestioner: function() {
-    var temp=this.questioner;
+  getHinter: function() {
+    var temp=this.hinter;
     ++temp;
     while(temp<this.seats.length && !this.seats[temp].joined)
       ++temp;
@@ -176,19 +228,29 @@ var main_game = {
       return -1;
   },
 
-  displayGetQuestion: function() {
-    this.jqGameText1("The Questioner is "+this.seats[this.questioner].name);
-    if(this.questioner===this.windowSeat.number) {
-      this.jqGameText2("Please enter in a question in the chat box");
+  getHintAnswer: function() {
+    if(this.windowSeat.number === this.hinter)
+        this.windowSeat.getAnswer();
+  },
+
+  displayTimerCount: function() {
+    this.jqDisplayTimeLeft();
+    --(this.timeLeft);
+  },
+
+  displayGetHint: function() {
+    this.jqGameText1("The Hinter is "+this.seats[this.hinter].name);
+    if(this.hinter===this.windowSeat.number) {
+      this.jqGameText2("Please enter in a hint in the chat box");
     }
     else {
-      this.jqGameText2("Waiting on Questiner to enter in a question");
+      this.jqGameText2("Waiting on Questiner to enter in a hint");
     }
   },
 
-  displayQuestion: function() {
-    this.jqGameText1("The Question is: "+this.question);
-     if(this.questioner===this.windowSeat.number) {
+  displayHint: function() {
+    this.jqGameText1("The Hint is: "+this.hint);
+     if(this.hinter===this.windowSeat.number) {
       this.jqGameText2("You may offer hints if you want");
     }
     else {
@@ -196,14 +258,48 @@ var main_game = {
     }
   },
 
+  startAnswerTimers: function(time) {
+    //just as a precaution;
+    clearInterval(this.intervalId);
+    clearTimeout(this.timeoutlId);
+
+    this.timeLeft=time;
+    this.displayTimerCount();
+    //this.jqGameText1("Countdown to game start has begun!");
+    this.intervalId=setInterval(function(){
+        main_game.displayTimerCount();
+      }, 1000);
+    this.timeoutId=setTimeout(function(){
+        main_game.fbSetState(0,gameStates.hintUnanswered);
+      }, time*1000);
+
+
+  },
+
+  nextRoundTimers: function(time){
+    //just as a precaution;
+    clearInterval(this.intervalId);
+    clearTimeout(this.timeoutlId);
+
+    this.timeLeft=time;
+    this.displayTimerCount();
+    //this.jqGameText1("Countdown to game start has begun!");
+    this.intervalId=setInterval(function(){
+        main_game.displayTimerCount();
+      }, 1000);
+    this.timeoutId=setTimeout(function(){
+        main_game.fbSetState(0,gameStates.readyToStartRound);
+      }, time*1000);
+  },
+
   displayResults: function() {
-    this.jqGameText1(this.seats[this.answerer].name+" has answered the question!");
+    this.jqGameText1(this.seats[this.answerer].name+" has answered the hint!");
     this.jqGameText2("The answer was: "+this.answer);
   },
 
    calculatePoints: function() {
     if(this.answerer!==0) {
-      if(this.windowSeat.number===this.questioner){
+      if(this.windowSeat.number===this.hinter){
         this.windowSeat.points+=1;
         this.windowSeat.fbSetSeat();
       }
@@ -213,6 +309,11 @@ var main_game = {
       }
     }
 
+  },
+
+  displayNotAnswered: function() {
+    this.jqGameText1("Time over!  No one gets any points!");
+    this.jqGameText2("The answer was: "+this.answer);
   },
 
   setAllSeatsUnReady: function() {
@@ -231,19 +332,23 @@ var main_game = {
 
   fbSendChatMessage: function(message) {
     if(this.windowSeat.number!==0) {
-      if(this.gameState===gameStates.waitingForQuestion && this.windowSeat.number===this.questioner)
-        this.setQuestion(message);
-      else if(this.gameState===gameStates.waitingForAnswer && this.windowSeat.number!==this.questioner)
+      if(this.gameState===gameStates.waitingForHint && this.windowSeat.number===this.hinter)
+        this.setHint(message);
+      else if(this.gameState===gameStates.waitingForAnswer && this.windowSeat.number!==this.hinter)
         this.checkAnswer(message);
 
-      if(this.gameState===gameStates.waitingForAnswer && this.windowSeat.number===this.questioner){
-        this.qChatRef.push({msg: message});
+      if(this.gameState===gameStates.waitingForAnswer && this.windowSeat.number===this.hinter){
+        this.hChatRef.push({msg: message});
       } else {
         var tempMsg = this.windowSeat.name+": "+message;
         this.chatRef.push({msg: tempMsg});
       }
     }
 
+  },
+
+  jqDisplayTimeLeft: function() {
+    $("#timer").text(this.timeLeft);
   },
 
   jqDisplayChatMessage: function(message) {
@@ -255,68 +360,91 @@ var main_game = {
     chatBox.scrollTop(chatBox[0].scrollHeight);
   },
 
-  jqDisplayQuestionerChat: function(message) {
+  jqDisplayHinterChat: function(message) {
     var p = $("<p>");
     p.text(message);
 
-    var chatBox=$("#chat-history-questioner");
+    var chatBox=$("#chat-history-hinter");
     chatBox.append(p);
     chatBox.scrollTop(chatBox[0].scrollHeight);
   },
 
-  clearQChat: function() {
-    $("#chat-history-questioner").empty();
-    this.qChatRef.remove();
+  clearHChat: function() {
+    $("#chat-history-hinter").empty();
+    this.hChatRef.remove();
   },
 
   displayGameOver: function() {
-    var winObject=this.getWinner();
-    this.jqGameText1(winObject.name+winObject.result+" With "+winObject.points+" Points!");
+    var winStr=this.getWinner();
+    this.jqGameText1(winStr);
     this.jqGameText2("Waiting for all people to be ready to start again");
-    this.gameState=gameStates.waitingForPlayers;
-    this.fbTempHostSetGame();
+    //this.fbSetState(0,gameStates.waitingForPlayers);
+
+    //just as a precaution;
+    clearInterval(this.intervalId);
+    clearTimeout(this.timeoutlId);
+    var time=3;
+    this.timeLeft=time;
+    this.displayTimerCount();
+    //this.jqGameText1("Countdown to game start has begun!");
+    this.intervalId=setInterval(function(){
+        main_game.displayTimerCount();
+      }, 1000);
+    this.timeoutId=setTimeout(function(){
+        main_game.fbSetState(0,gameStates.waitingForPlayers);
+      }, time*1000);
+
+
   },
 
   getWinner: function() {
     var maxPoints=0;
-    var names="";
-    var number=0;
-    for(var i=i; i<this.seats.length; ++i){
-      if(this.seat[i].points>maxPoints)
-        maxPoints=this.seat[i].points;
+    var names=[];
+    for(var i=1; i<this.seats.length; ++i){
+      if(this.seats[i].points>maxPoints)
+        maxPoints=this.seats[i].points;
     }
-    for(var i=i; i<this.seats.length; ++i){
-      if(this.seat[i].points===maxPoints) {
-        names=names+this.seat[i]+" ,";
-        ++number;
+    for(var i=1; i<this.seats.length; ++i){
+      if(this.seats[i].points===maxPoints) {
+        names.push(this.seats[i].name);
       }
     }
 
-    if(number===1) {
-      return {points: maxPoints, name: names, result: " is the Winner!"};
+    var str="";
+
+    for(var i=0; i<names.length; ++i){
+      if(i!==0)
+        str+=", ";
+      str+=names[i];
     }
+
+    if(names.length===1)
+      str+=" is the Winner! With "+maxPoints+ "Points!";
     else
-      return {points: maxPoints, name: names.substring(0, names.length-2), result: " have tied!"};
+      str+=" have tied! With "+maxPoints+ "Points!";
+
+    return str;
 
   },
 
+  //only the hinter is going to call this function
   setAnswer: function(str) {
     this.answer=str;
-    this.gameState=gameStates.waitingForQuestion;
-    this.fbSetGame();
+    this.fbSetState(this.hinter, gameStates.waitingForHint);
   },
 
-  setQuestion: function(str) {
-    this.question=str;
-    this.gameState=gameStates.waitingForAnswer;
-    this.fbSetGame();
+  //only the hinter is going to call this function
+  setHint: function(str) {
+    console.log("we be getting called");
+    this.hint=str;
+    this.fbSetState(this.hinter, gameStates.waitingForAnswer);
   },
 
+  //only the first window to submit the correct answer will call this function
   checkAnswer: function(str) {
     if(str===this.answer){
       this.answerer=this.windowSeat.number;
-      this.gameState=gameStates.questionAnswered;
-      this.fbSetGame();
+      this.fbSetState(this.answerer, gameStates.hintAnswered);
     }
   },
 

@@ -79,7 +79,7 @@ $(document).ready(function(){
   });
 
   database.ref("q-chat").on("child_added", function(snapshot){
-      main_game.jqDisplayQuestionerChat(snapshot.val().msg);
+      main_game.jqDisplayHinterChat(snapshot.val().msg);
     }, function(errorObject){
       console.log("Errors handled: " + errObject.code);
   });
