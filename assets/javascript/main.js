@@ -89,4 +89,11 @@ $(document).ready(function(){
     }, function(errorObject){
       console.log("Errors handled: " + errObject.code);
   });
+
+  database.ref("mask").on("value", function(snapshot){
+      if(snapshot.exists())
+        main_game.fbUpdateMask(snapshot.val());
+    }, function(errorObject){
+      console.log("Errors handled: " + errObject.code);
+  });
 });

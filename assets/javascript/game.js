@@ -13,15 +13,20 @@ var main_game = {
   hint: "",
   answer: "",
   answerer: 0,
+  answerMask: null,
 
   fuzzyCompare: null,
 
   intervalId: null,
   timeoutId: null,
+  maskIntervalId: null,
 
   chatRef: database.ref("chat"),
+  chatRefDisc: null,
   hChatRef: database.ref("q-chat"),
+  hChatRefDisc: null,
   gameRef: database.ref("game"),
+  gameRefDisc: null,
 
 
 
@@ -39,6 +44,11 @@ var main_game = {
 
   fbSetGame: function () {
     this.gameRef.set({gameState: this.gameState, hint: this.hint, hinter: this.hinter, answer: this.answer, answerer: this.answerer});
+  },
+
+  fbUpdateMask: function(val) {
+    console.log(val.str);
+    this.answerMask=JSON.parse(val.str);
   },
 
   fbUpdateGame: function(val) {
@@ -60,6 +70,13 @@ var main_game = {
     tempSeat.joined=val.joined;
     tempSeat.points=val.points;
     tempSeat.ready=val.ready;
+    tempSeat.jqDisplayAll();
+
+    var lastCon=this.getLastConnected();
+    if(lastCon!==0)
+      this.fbDisconnectAttach(lastCon);
+    else
+      this.fbCancelDisconnect();
   },
 
   playerLeftDuringGame: function(name) {
@@ -74,6 +91,46 @@ var main_game = {
     for(var i=1; i<this.seats.length; ++i){
       if(this.seats[i].joined)
         return this.seats[i];
+    }
+  },
+
+  getLastConnected: function() {
+    var result=true;
+    var num=0;
+    for(var i=1; i<this.seats.length; ++i){
+      if(result && this.seats[i].joined){
+        num=i;
+        result=false;
+      }
+      else if(this.seats[i].joined)
+        num=0;
+    }
+    return num;
+  },
+
+  fbDisconnectAttach: function(num){
+    if(num===this.windowSeat.number){
+      this.gameRefDisc=this.gameRef.onDisconnect();
+      this.gameRefDisc.set({gameState: gameStates.waitingForPlayers, hinter: 0, hint: "", answerer: 0, answer: ""});
+      this.hChatRefDisc=this.hChatRef.onDisconnect();
+      this.hChatRefDisc.remove();
+      this.chatRefDisc=this.chatRef.onDisconnect();
+      this.chatRefDisc.remove();
+    }
+  },
+
+  fbCancelDisconnect: function(){
+    if(this.gameRefDisc!==null) {
+      this.gameRefDisc.cancel();
+      this.gameRefDisc=null;
+    }
+    if(this.hChatRefDisc!==null) {
+      this.hChatRefDisc.cancel();
+      this.hChatRefDisc=null;
+    }
+    if(this.chatRefDisc!==null) {
+      this.chatRefDisc.cancel();
+      this.chatRefDisc=null;
     }
   },
 
@@ -94,6 +151,20 @@ var main_game = {
     if(this.windowSeat.number===tempSeat.number) {
       console.log("This Window is changing state to: "+state);
       this.gameRef.set({gameState: state, hint: this.hint, hinter: this.hinter, answer: this.answer, answerer: this.answerer});
+    }
+  },
+
+  fbSetMask: function(num, string) {
+    console.log("fb Set Mask "+num);
+    var tempSeat=null;
+    if(num===0)
+      tempSeat=this.getTempHost();
+    else
+      tempSeat=this.seats[num];
+
+    if(this.windowSeat.number===tempSeat.number) {
+      console.log("This Window is setting mask");
+      database.ref("mask").set({str: string});
     }
   },
 
@@ -163,7 +234,8 @@ var main_game = {
           this.jqGameText1("Waiting for players"); //Wiatin for more than 2 players to sit and hit ready.
           break;
         case gameStates.readyToStartGame:
-          this.startGame(3); //Interval to start Game and timeout
+          this.startGame(); //Interval to start Game and timeout
+          this.gameStartTimers(3, 0, gameStates.readyToStartRound);
           break;
         case gameStates.readyToStartRound:
           this.gameStopTimers();  
@@ -178,7 +250,9 @@ var main_game = {
           this.displayGetHint();
           break;
         case gameStates.waitingForAnswer:
+          this.jqDisplayHiddenAnswer();
           this.displayHint();
+          this.intervalUnhideAnswer(2);
           //this.startAnswerTimers(30);
           this.gameStartTimers(30, this.hinter, gameStates.hintUnanswered);
           break;
@@ -216,6 +290,10 @@ var main_game = {
       clearTimeout(this.timeoutId);
       this.timeoutId=null;
     }
+    if(this.maskIntervalId!==null) {
+      clearInterval(this.maskIntervalId);
+      this.maskIntervalId=null;
+    }
   },
 
   gameStartTimers(time, seat=0, state=gameStates.waitingForPlayers){
@@ -234,11 +312,9 @@ var main_game = {
       }, time*1000);
   },
 
-  startGame: function(time) {
+  startGame: function() {
     this.round=0;
     this.jqGameText1("Countdown to game start has begun!");
-
-    this.gameStartTimers(3, 0, gameStates.readyToStartRound);
   },
 
   startRound: function() {
@@ -297,7 +373,22 @@ var main_game = {
     }
   },
 
+  maskUnhide: function() {
+    this.jqDisplayHiddenAnswer();
 
+    var tempSeat=this.getTempHost();
+    if(this.windowSeat.number===tempSeat.number) {
+      var rng=Math.floor(Math.random()*this.answer.length);
+      this.answerMask[rng]=true;
+      this.fbSetMask(tempSeat.number, JSON.stringify(this.answerMask));
+    }
+  },
+
+  intervalUnhideAnswer: function(time) {
+    this.maskIntervalId=setInterval(function(){
+        main_game.maskUnhide();
+      }, time*1000);
+  },
 
   displayResults: function() {
     this.jqGameText1(this.seats[this.answerer].name+" has answered the hint!");
@@ -358,6 +449,17 @@ var main_game = {
     $("#timer").text(this.timeLeft);
   },
 
+  jqDisplayHiddenAnswer: function() {
+    var displayStr="";
+    for(var i=0; i<this.answer.length; ++i)
+      if(this.answerMask[i])
+        displayStr+=this.answer[i]+'&nbsp;';
+      else
+        displayStr+="_&nbsp;";
+
+    $("#movie-to-guess").html(displayStr);
+  },
+
   jqDisplayChatMessage: function(message) {
     var p = $("<p>");
     p.text(message);
@@ -382,14 +484,12 @@ var main_game = {
   },
 
   displayGameOver: function() {
-    var winStr=this.getWinner();
+    var winStr=this.getWinnerStr();
     this.jqGameText1(winStr);
     this.jqGameText2("Waiting for all people to be ready to start again");
-    //this.fbSetState(0,gameStates.waitingForPlayers);
-
   },
 
-  getWinner: function() {
+  getWinnerStr: function() {
     var maxPoints=0;
     var names=[];
     for(var i=1; i<this.seats.length; ++i){
@@ -422,12 +522,21 @@ var main_game = {
   //only the hinter is going to call this function
   setAnswer: function(str) {
     this.answer=str;
+    this.mask=[];
+    for(var i=0; i<str.length; ++i)
+      if(str[i]===' ')
+        this.mask[i]=true;
+      else
+        this.mask[i]=false;
+
+    console.log(this.mask);
+    this.fbSetMask(this.hinter, JSON.stringify(this.mask));
     this.fbSetState(this.hinter, gameStates.waitingForHint);
   },
 
   //only the hinter is going to call this function
   setHint: function(str) {
-    console.log("we be getting called");
+    //console.log("we be getting called");
     this.hint=str;
     this.fbSetState(this.hinter, gameStates.waitingForAnswer);
   },

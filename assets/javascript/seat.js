@@ -30,4 +30,11 @@ function Seat(num=0, name="Empty", joined=false, points=0, ready=false){
   this.jqDisplayName = function() {
     $("#player"+num+"-name").text(this.name);
   };
+  this.jqDisplayPoints = function() {
+    $("#player"+num+"-points").text(this.points);
+  };
+  this.jqDisplayAll = function() {
+    this.jqDisplayName();
+    this.jqDisplayPoints();
+  };
 }
